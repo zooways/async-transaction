@@ -1,13 +1,16 @@
 package cn.zoowayss.async.tran.service;
 
+import cn.zoowayss.async.tran.annotation.SonTransaction;
 import cn.zoowayss.async.tran.entity.User;
 import cn.zoowayss.async.tran.mapper.UserMapper;
 import cn.zoowayss.async.tran.service.impl.UserService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import java.util.concurrent.CountDownLatch;
@@ -59,5 +62,28 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         } catch (Exception e) {
             dataSourceTransactionManager.rollback(transaction);
         }
+    }
+
+
+    @Transactional(rollbackFor = Exception.class)
+    @Async("asyncExecutor")
+    @SonTransaction
+    @Override
+    public void sonMethod1(String args, Thread thread) {
+        save(User.builder().name("zoowayss").build());
+    }
+    @Transactional(rollbackFor = Exception.class)
+    @Async("asyncExecutor")
+    @SonTransaction
+    @Override
+    public void sonMethod2(String args, Thread thread) {
+        save(User.builder().name("zoowayss").build());
+    }
+    @Transactional(rollbackFor = Exception.class)
+    @Async("asyncExecutor")
+    @SonTransaction
+    @Override
+    public void sonMethod3(String args, Thread thread) {
+        save(User.builder().name("zoowayss1").build());
     }
 }
