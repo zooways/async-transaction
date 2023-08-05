@@ -1,2 +1,7 @@
 server:
   port: 8888
+spring:
+  datasource:
+    url: jdbc:mysql://zoowayss.top:3326/test_db?useUnicode=true&timeZone=Asia/shanghai
+    username: root
+    password: rootmima
