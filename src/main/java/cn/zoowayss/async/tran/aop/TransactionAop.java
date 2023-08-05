@@ -12,9 +12,9 @@ import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import javax.annotation.Resource;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -22,17 +22,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Component
 public class TransactionAop {
 
+
+    public static final String MAIN_DOWN_LATCH = "mainDownLatch";
+
+    public static final String SUN_DOWN_LATCH = "sunDownLatch";
+    public static final String ROLLBACK_FLAG = "rollbackFlag";
+    public static final String EXCEPTION = "exception";
+
     //用来存储各线程计数器数据(每次执行后会从map中删除)
-    private static final Map<String, Object> map = new HashMap<>();
+    private static final Map<String, Object> map = new ConcurrentHashMap<>();
 
     @Resource
     private PlatformTransactionManager transactionManager;
 
-    @Around("@annotation(cn.zoowayss.async.tran.annotation.MainTransaction)")
+    @Around("@annotation(mainTransaction)")
     public void mainIntercept(ProceedingJoinPoint joinPoint, MainTransaction mainTransaction) throws Throwable {
         //当前线程名称
-        Thread thread = Thread.currentThread();
-        String threadName = thread.getName();
+        String threadName = Thread.currentThread().getName();
         //初始化计数器
         CountDownLatch mainDownLatch = new CountDownLatch(1);
         CountDownLatch sonDownLatch = new CountDownLatch(mainTransaction.value());//@MainTransaction注解中的参数, 为子线程的数量
@@ -41,10 +47,10 @@ public class TransactionAop {
         // 用来存每个子线程的异常，把每个线程的自定义异常向vector的首位置插入，其余异常向末位置插入，避免线程不安全，所以使用vector代替list
         Vector<Throwable> exceptionVector = new Vector<>();
 
-        map.put(threadName + "mainDownLatch", mainDownLatch);
-        map.put(threadName + "sonDownLatch", sonDownLatch);
-        map.put(threadName + "rollBackFlag", rollBackFlag);
-        map.put(threadName + "exceptionVector", exceptionVector);
+        map.put(threadName+MAIN_DOWN_LATCH, mainDownLatch);
+        map.put(threadName + SUN_DOWN_LATCH, sonDownLatch);
+        map.put(threadName + ROLLBACK_FLAG, rollBackFlag);
+        map.put(threadName + EXCEPTION, exceptionVector);
 
         try {
             joinPoint.proceed();//执行方法
@@ -65,10 +71,10 @@ public class TransactionAop {
             }
         }
         if (CollectionUtils.isNotEmpty(exceptionVector)) {
-            map.remove(threadName + "mainDownLatch");
-            map.remove(threadName + "sonDownLatch");
-            map.remove(threadName + "rollBackFlag");
-            map.remove(threadName + "exceptionVector");
+            map.remove(threadName + MAIN_DOWN_LATCH);
+            map.remove(threadName + SUN_DOWN_LATCH);
+            map.remove(threadName + ROLLBACK_FLAG);
+            map.remove(threadName + EXCEPTION);
             throw exceptionVector.get(0);
         }
     }
@@ -78,15 +84,15 @@ public class TransactionAop {
         Object[] args = joinPoint.getArgs();
         Thread thread = (Thread) args[args.length - 1];
         String threadName = thread.getName();
-        CountDownLatch mainDownLatch = (CountDownLatch) map.get(threadName + "mainDownLatch");
+        CountDownLatch mainDownLatch = (CountDownLatch) map.get(threadName + MAIN_DOWN_LATCH);
         if (mainDownLatch == null) {
             //主事务未加注解时, 直接执行子事务
             joinPoint.proceed();//这里最好的方式是:交由上面的thread来调用此方法,但我没有找寻到对应api,只能直接放弃事务, 欢迎大神来优化, 留言分享
             return;
         }
-        CountDownLatch sonDownLatch = (CountDownLatch) map.get(threadName + "sonDownLatch");
-        AtomicBoolean rollBackFlag = (AtomicBoolean) map.get(threadName + "rollBackFlag");
-        Vector<Throwable> exceptionVector = (Vector<Throwable>) map.get(threadName + "exceptionVector");
+        CountDownLatch sonDownLatch = (CountDownLatch) map.get(threadName + SUN_DOWN_LATCH);
+        AtomicBoolean rollBackFlag = (AtomicBoolean) map.get(threadName + ROLLBACK_FLAG);
+        Vector<Throwable> exceptionVector = (Vector<Throwable>) map.get(threadName + EXCEPTION);
 
         //如果这时有一个子线程已经出错，那当前线程不需要执行
         if (rollBackFlag.get()) {
@@ -95,7 +101,7 @@ public class TransactionAop {
         }
 
         DefaultTransactionDefinition def = new DefaultTransactionDefinition();// 开启事务
-        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);// 设置事务隔离级别
+        def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);// 设置事务隔离级别
         TransactionStatus status = transactionManager.getTransaction(def);
 
         try {

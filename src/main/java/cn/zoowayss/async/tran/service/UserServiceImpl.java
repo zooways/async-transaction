@@ -72,18 +72,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public void sonMethod1(String args, Thread thread) {
         save(User.builder().name("zoowayss").build());
     }
+
     @Transactional(rollbackFor = Exception.class)
     @Async("asyncExecutor")
     @SonTransaction
     @Override
     public void sonMethod2(String args, Thread thread) {
-        save(User.builder().name("zoowayss").build());
+        save(User.builder().name("zoowayss1").build());
+//        int a = 10 / 0;
     }
+
     @Transactional(rollbackFor = Exception.class)
     @Async("asyncExecutor")
     @SonTransaction
     @Override
     public void sonMethod3(String args, Thread thread) {
-        save(User.builder().name("zoowayss1").build());
+        save(User.builder().name("zoowayss12").build());
     }
 }
